@@ -1,0 +1,119 @@
+import json
+
+import spacy
+from spacy.util import minibatch, compounding
+from spacy.pipeline import SentenceSegmenter
+from spacy.lang.en.stop_words import STOP_WORDS
+
+from sumy.parsers.plaintext import PlaintextParser
+from sumy.parsers.html import HtmlParser
+from sumy.nlp.tokenizers import Tokenizer
+from sumy.summarizers.lex_rank import LexRankSummarizer
+
+import re
+import time
+
+''' Defining a LexRank class '''
+class TextSummary(object): 
+    def __init__(self, feeds_str, num_sents):
+        self.summary = str()
+        parser = PlaintextParser.from_string(feeds_str, Tokenizer("english"))
+        summarizer = LexRankSummarizer()
+        sentences = summarizer(parser.document, num_sents)  # Summarize the document with 5 sentences
+        for sentence in sentences:
+            self.summary += (sentence.__unicode__())
+    def output(self):
+        return self.summary
+    
+
+''' Parsing json files '''
+def parse_json_file(json_file):
+    with open(json_file) as f:
+        lines = f.readlines()
+    parsed_json = [json.loads(line) for line in lines]
+    return parsed_json
+
+
+DATA_FILE = r'C:/Github/nlp-analytics/term_project/Airlines_dedup.json'
+
+
+# Load in deduped dataset - clean
+mydata = parse_json_file(DATA_FILE)
+
+# Add new cleaned date field
+for feed in mydata:
+    feed['date_clean'] = feed['published'][:10]
+
+# Unique ID for each article
+ids = [feed['id'] for feed in mydata]
+
+# Extract dates and feeds and put into a dictionary
+dates = [feed['date_clean'] for feed in mydata]
+feeds = [feed['text'] for feed in mydata]
+feed_dict = {ids[i]: [dates[i], feeds[i]] for i in range(len(feeds))}
+
+# Clean the dates field
+dates_clean = [date[:10] for date in dates]
+unique_dates = set(dates_clean)
+
+
+# Create a list of indices for each article
+for i in range(len(mydata)):
+    mydata[i]['id'] = i
+
+
+''' Summarizing each individual feed to five sentences '''
+for feed in mydata:
+    try:
+        feed['summary'] = TextSummary(feed['text'], num_sents=5).output()
+    except:
+        continue
+
+text_summaries = [feed['summary'] for feed in mydata]
+
+
+''' List of feeds by week '''
+
+W1 = ['2020-06-28', '2020-06-29', '2020-06-30', '2020-07-01', '2020-07-02', '2020-07-03', '2020-07-04']
+W2 = ['2020-07-05', '2020-07-06', '2020-07-07', '2020-07-08', '2020-07-09', '2020-07-10', '2020-07-11']
+W3 = ['2020-07-11', '2020-07-12', '2020-07-13', '2020-07-14', '2020-07-15', '2020-07-16', '2020-07-17']
+W3 = ['2020-07-18', '2020-07-19', '2020-07-20', '2020-07-21', '2020-07-22', '2020-07-23', '2020-07-24']
+
+W1_feeds = []
+W2_feeds = []
+W3_feeds = []
+W4_feeds = []
+
+for feed in mydata:
+    for day in unique_dates:
+        if feed['date_clean'] == day:
+            if day in W1:
+                W1_feeds.append(feed['summary'])
+            elif day in W2:
+                W2_feeds.append(feed['summary'])
+            elif day in W3:
+                W3_feeds.append(feed['summary'])
+            else:
+                W4_feeds.append(feed['summary'])
+                
+
+
+
+''' Extractive Summarization by week '''
+
+weekly_feeds = [W1_feeds, W2_feeds, W3_feeds, W4_feeds]
+weekly_summary = []
+for week_feed in weekly_feeds:
+    tic = time.perf_counter()
+    print('Moving on to another week...')
+    text = ' '.join([str(elem) for elem in week_feed]) 
+    week_summary = TextSummary(text, 3).output()
+    weekly_summary.append(week_summary)
+    toc = time.perf_counter()
+    print('Week summaries completed in {} mins'.format((toc-tic)/60))
+    print('======================================================')
+
+
+for summary in weekly_summary:
+    print(summary)
+    print()
